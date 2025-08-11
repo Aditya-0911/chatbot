@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage, BaseMessage
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
+import os
 import json
 
 load_dotenv()
@@ -19,7 +20,9 @@ def chat_node(state:chatstate)->chatstate:
     response = model.invoke(messages)
     return {'messages':[response]}
 
-conn = sqlite3.connect("chatbot2.db", check_same_thread=False)
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "chatbot2.db")
+conn = sqlite3.connect(DB_PATH, check_same_thread=False)
 
 # Create thread summaries table if it doesn't exist
 conn.execute('''
@@ -116,4 +119,5 @@ def delete_thread(thread_id):
         (str(thread_id),)
     )
     conn.commit()
+
     # Note: You might also want to delete from checkpointer, but that depends on your needs
