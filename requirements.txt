@@ -2,4 +2,3 @@ streamlit
 langchain-google-genai
 langgraph
 python-dotenv
-sqlite3-binary
