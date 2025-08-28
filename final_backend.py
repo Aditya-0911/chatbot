@@ -3,14 +3,31 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph,START,END
 from typing import TypedDict, Annotated
 from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.tools import Tool
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_community.utilities import GoogleSerperAPIWrapper
 from langgraph.checkpoint.sqlite import SqliteSaver
 import sqlite3
-import os
 import json
+import os
+
+os.environ['LANGCHAIN_PROJECT'] = 'Chatbot Project'
 
 load_dotenv()
+
+search_wrapper = GoogleSerperAPIWrapper(type="search")
+
+search_tool = Tool(
+    name="search",
+    func=search_wrapper.run,
+    description="Useful for answering questions about current events or the web."
+)
+
+tools = [search_tool] 
+
 model = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+model = model.bind_tools(tools)
 
 class chatstate(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -21,8 +38,7 @@ def chat_node(state:chatstate)->chatstate:
     return {'messages':[response]}
 
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "chatbot2.db")
-conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+conn = sqlite3.connect("chatbot2.db", check_same_thread=False)
 
 # Create thread summaries table if it doesn't exist
 conn.execute('''
@@ -40,10 +56,16 @@ checkpointer = SqliteSaver(conn=conn)
 graph = StateGraph(chatstate)
 
 # add nodes
+
 graph.add_node('chat_node', chat_node)
 
+tool_node = ToolNode(tools=tools)
+graph.add_node('tools',tool_node)
+
 graph.add_edge(START, 'chat_node')
-graph.add_edge('chat_node', END)
+graph.add_conditional_edges('chat_node',tools_condition)
+graph.add_edge('tools', 'chat_node')
+# graph.add_edge('chat_node', END)
 
 chatbot = graph.compile(checkpointer=checkpointer)
 
@@ -119,5 +141,3 @@ def delete_thread(thread_id):
         (str(thread_id),)
     )
     conn.commit()
-
-    # Note: You might also want to delete from checkpointer, but that depends on your needs
